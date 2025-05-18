@@ -1,0 +1,9 @@
+django
+django-keycloak-auth
+social-auth-app-django
+python-keycloak
+scikit-learn 
+onnxruntime 
+joblib
+numpy
+pandas 
