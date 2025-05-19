@@ -3,20 +3,25 @@ import numpy as np
 import pandas as pd
 import joblib
 import os
+import requests
 
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
+from django.http import JsonResponse, HttpResponse
 
 from rest_framework.decorators import api_view
+from common.jwt_auth import require_jwt
 
-from .services import upload_file_to_archiver, restore_data, get_current_data
 
-MODEL_DIR = os.path.join(settings.BASE_DIR, "models")
+# from .services import upload_file_to_archiver, restore_data, get_current_data
 
-onnx_session = ort.InferenceSession(os.path.join(MODEL_DIR, "mlp_eta_model.onnx"))
-X_scaler = joblib.load(os.path.join(MODEL_DIR, "X_scaler_final.pkl"))
-y_scaler = joblib.load(os.path.join(MODEL_DIR, "y_scaler_final.pkl"))
+MODEL_DIR = os.path.join(settings.BASE_DIR, os.getenv("MODEL_DIR", "models"))
+
+onnx_session = ort.InferenceSession(os.path.join(MODEL_DIR, os.getenv("MODEL_FILE", "mlp_eta_model.onnx")))
+X_scaler = joblib.load(os.path.join(MODEL_DIR, os.getenv("X_SCALER_FILE", "X_scaler_final.pkl")))
+y_scaler = joblib.load(os.path.join(MODEL_DIR, os.getenv("Y_SCALER_FILE", "y_scaler_final.pkl")))
+
 
 FEATURES = [
     "tracking_last_speed",
@@ -32,8 +37,11 @@ FEATURES = [
     "is_weekend",
 ]
 
+FASTAPI_HOST = os.getenv("FASTAPI_HOST", "http://fastapi:8001")
+ARCHIVER_HOST = os.getenv("ARCHIVER_HOST", "http://archiver:8080")
 
 @api_view(["POST"])
+@require_jwt
 def predict_eta(request):
     try:
         input_data = request.data
@@ -60,34 +68,86 @@ def predict_eta(request):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
+@csrf_exempt
+@require_jwt
+def fastapi_proxy(request, path):
+    import requests
+    cleaned_path = path  
 
-# @csrf_exempt
-# def upload_view(request):
-#     if request.method == "POST":
-#         file = request.FILES.get("file")
-#         if not file:
-#             return JsonResponse({"error": "No file provided"}, status=400)
+    if path.startswith("transport/"):
+        cleaned_path = path[len("transport/"):]  
 
-#         with open(f"/tmp/{file.name}", "wb+") as temp_file:
-#             for chunk in file.chunks():
-#                 temp_file.write(chunk)
+    url = f"{FASTAPI_HOST}/{cleaned_path}"
 
-#         result = upload_file_to_archiver(f"/tmp/{file.name}")
-#         return JsonResponse(result)
-    
-    
-# @csrf_exempt
-# def restore_view(request):
-#     date_begin = request.GET.get("date_begin")
-#     date_end = request.GET.get("date_end")
-#     if not date_begin or not date_end:
-#         return JsonResponse({"error": "Missing dates"}, status=400)
+    headers = {
+        k: v for k, v in request.headers.items()
+        if k.lower() not in ['host', 'content-length']
+    }
+    headers["X-Forwarded-Host"] = request.get_host()
+    headers["X-Forwarded-Proto"] = "http"
 
-#     result = restore_data(date_begin, date_end)
-#     return JsonResponse(result)
+    try:
+        if request.method in ["POST", "PUT", "PATCH"]:
+            response = requests.request(
+                method=request.method,
+                url=url,
+                headers=headers,
+                data=request.body,
+                params=request.GET,
+            )
+        else:
+            response = requests.request(
+                method=request.method,
+                url=url,
+                headers=headers,
+                params=request.GET,
+            )
+
+        return HttpResponse(
+            response.content,
+            status=response.status_code,
+            content_type=response.headers.get('content-type', 'application/json')
+        )
+
+    except requests.exceptions.RequestException as e:
+        return JsonResponse({"error": str(e)}, status=502)
+
+@csrf_exempt
+@require_jwt
+def archiver_proxy(request, path):
+    import requests
+
+    url = f"{ARCHIVER_HOST}/{path}"
+    headers = {
+        k: v for k, v in request.headers.items()
+        if k.lower() not in ['host', 'content-type', 'content-length']
+    }
+
+    try:
+        if request.method == "POST" and request.FILES:
+            file_obj = request.FILES.get("file")
+            files = {'file': (file_obj.name, file_obj.read(), file_obj.content_type)}
+            response = requests.post(url, files=files, headers=headers, params=request.GET)
+        else:
+            response = requests.request(
+                method=request.method,
+                url=url,
+                headers=headers,
+                data=request.body,
+                params=request.GET,
+            )
 
 
-# @csrf_exempt
-# def current_view(request):
-#     result = get_current_data()
-#     return JsonResponse(result, safe=False)
+        return HttpResponse(
+            response.content,
+            status=response.status_code,
+            content_type=response.headers.get('content-type', 'application/json')
+        )
+    except requests.exceptions.RequestException as e:
+        return JsonResponse({"error": str(e)}, status=502)
+
+
+
+
+
+

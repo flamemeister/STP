@@ -152,17 +152,29 @@ SOCIAL_AUTH_KEYCLOAK_IGNORE_DEFAULT_SCOPE = True
 SOCIAL_AUTH_KEYCLOAK_EXTRA_DATA = ['id_token']
 SOCIAL_AUTH_KEYCLOAK_SKIP_JWT_VERIFICATION = True
 
-SOCIAL_AUTH_KEYCLOAK_AUTHORIZATION_URL = 'http://localhost:8081/realms/django-realm/protocol/openid-connect/auth'
-SOCIAL_AUTH_KEYCLOAK_ACCESS_TOKEN_URL = 'http://localhost:8081/realms/django-realm/protocol/openid-connect/token'
-SOCIAL_AUTH_KEYCLOAK_USER_INFO_URL = 'http://localhost:8081/realms/django-realm/protocol/openid-connect/userinfo'
+SOCIAL_AUTH_KEYCLOAK_AUTHORIZATION_URL = 'http://keycloak:8080/realms/django-realm/protocol/openid-connect/auth'
+SOCIAL_AUTH_KEYCLOAK_ACCESS_TOKEN_URL = 'http://keycloak:8080/realms/django-realm/protocol/openid-connect/token'
+SOCIAL_AUTH_KEYCLOAK_USER_INFO_URL = 'http://keycloak:8080/realms/django-realm/protocol/openid-connect/userinfo'
 
-KEYCLOAK_SERVER_URL = 'http://localhost:8081/'
-KEYCLOAK_REALM = 'master'
-KEYCLOAK_ADMIN_USERNAME = 'admin'
-KEYCLOAK_ADMIN_PASSWORD = 'admin'
-KEYCLOAK_CLIENT_ID = 'admin-cli'
+
 
 import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+KEYCLOAK_CLIENT_ID = os.getenv("KEYCLOAK_CLIENT_ID")
+
+INSTALLED_APPS += [
+    'rest_framework',
+]
+from decouple import config
+
+KEYCLOAK_REALM = config("KEYCLOAK_REALM", default="master")
+KEYCLOAK_URL = config("KEYCLOAK_URL", default="http://keycloak:8080")
+KEYCLOAK_PUBLIC_KEY = None  

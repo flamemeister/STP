@@ -7,3 +7,8 @@ onnxruntime
 joblib
 numpy
 pandas 
+python-dotenv
+python-decouple
+djangorestframework 
+python-jose
+drf-yasg

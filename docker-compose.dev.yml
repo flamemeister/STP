@@ -38,6 +38,8 @@ services:
     container_name: core
     build:
       context: ./STP_CORE
+    env_file:
+      - .env
     volumes:
       - ./STP_CORE:/app
       - ./STP_CORE/models:/app/models
@@ -114,18 +116,18 @@ services:
     networks:
       - backend
   
-  nginx:
-    image: nginx:latest
-    container_name: nginx-proxy
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
-    ports:
-      - "80:80"
-    depends_on:
-      - core
-      - etl
-    networks:
-      - backend
+  # nginx:
+  #   image: nginx:latest
+  #   container_name: nginx-proxy
+  #   volumes:
+  #     - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+  #   ports:
+  #     - "80:80"
+  #   depends_on:
+  #     - core
+  #     - etl
+  #   networks:
+  #     - backend
 
 
 volumes:
