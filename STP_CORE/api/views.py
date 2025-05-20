@@ -147,7 +147,3 @@ def archiver_proxy(request, path):
         return JsonResponse({"error": str(e)}, status=502)
 
 
-
-
-
-
