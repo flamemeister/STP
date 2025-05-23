@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'api',
     'user',
     'social_django',
+    'corsheaders'
 
 ]
 
@@ -52,6 +53,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     'social_django.middleware.SocialAuthExceptionMiddleware',
+    "corsheaders.middleware.CorsMiddleware",
 
 ]
 
@@ -178,3 +180,5 @@ from decouple import config
 KEYCLOAK_REALM = config("KEYCLOAK_REALM", default="master")
 KEYCLOAK_URL = config("KEYCLOAK_URL", default="http://keycloak:8080")
 KEYCLOAK_PUBLIC_KEY = None  
+
+CORS_ALLOW_ALL_ORIGINS = True
