@@ -139,6 +139,8 @@ services:
     command: npm run dev
     environment:
       - CHOKIDAR_USEPOLLING=true
+    networks:
+      - backend
 
 volumes:
   mongo_data:
