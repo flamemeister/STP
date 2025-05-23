@@ -133,7 +133,7 @@ services:
     ports:
       - "5173:5173" 
     volumes:
-      - .:/app
+      - ./STP_client:/app
       - /app/node_modules
     container_name: stp-client
     command: npm run dev
