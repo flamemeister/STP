@@ -12,3 +12,7 @@ python-decouple
 djangorestframework 
 python-jose
 drf-yasg
+django-cors-headers
+django-prometheus
+kafka-python
+confluent-kafka

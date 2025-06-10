@@ -13,6 +13,7 @@ from django.http import JsonResponse, HttpResponse
 from rest_framework.decorators import api_view
 from common.jwt_auth import require_jwt
 
+from core.kafka_producer import send_event
 
 # from .services import upload_file_to_archiver, restore_data, get_current_data
 
@@ -59,6 +60,15 @@ def predict_eta(request):
 
         minutes = int(eta_seconds // 60)
         seconds = int(eta_seconds % 60)
+        
+        print("⏳ Готовимся отправить в Kafka")
+
+        send_event(
+            "eta_predictions", {
+            "input": input_data,
+            "eta_seconds": eta_seconds,
+        })
+        print("📤 Kafka сообщение отправлено")  
 
         return JsonResponse({
             "eta_seconds": eta_seconds,
@@ -72,10 +82,10 @@ def predict_eta(request):
 @require_jwt
 def fastapi_proxy(request, path):
     import requests
-    cleaned_path = path  
 
+    cleaned_path = path
     if path.startswith("transport/"):
-        cleaned_path = path[len("transport/"):]  
+        cleaned_path = path[len("transport/"):]
 
     url = f"{FASTAPI_HOST}/{cleaned_path}"
 
@@ -102,6 +112,14 @@ def fastapi_proxy(request, path):
                 headers=headers,
                 params=request.GET,
             )
+
+        send_event(
+            "proxy_calls", {
+                "path": path,
+                "target": "fastapi",
+                "method": request.method,
+                "status_code": response.status_code
+            })
 
         return HttpResponse(
             response.content,
@@ -137,6 +155,13 @@ def archiver_proxy(request, path):
                 params=request.GET,
             )
 
+        send_event(
+            "proxy_calls", {
+            "path": path,
+            "target": "archiver",
+            "method": request.method,
+            "status_code": response.status_code
+        })
 
         return HttpResponse(
             response.content,

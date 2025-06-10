@@ -49,6 +49,8 @@ services:
     depends_on:
       - mongo
       - archiver
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
     networks:
       - backend
 
@@ -110,7 +112,7 @@ services:
       POSTGRES_USER: stp
       POSTGRES_PASSWORD: stp_password
     ports:
-      - "5433:5432"  
+      - "5434:5432"  
     volumes:
       - stp_postgres_data:/var/lib/postgresql/data
     networks:
@@ -142,11 +144,154 @@ services:
     networks:
       - backend
 
+  redis:
+    image: redis:7
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - backend
+
+  celery-worker:
+    build:
+      context: ./STP_ETL/celery
+      dockerfile: Dockerfile
+    container_name: celery-worker
+    command: celery -A tasks worker --loglevel=info
+    depends_on:
+      - redis
+    networks:
+      - backend
+
+  celery-beat:
+    build:
+      context: ./STP_ETL/celery
+      dockerfile: Dockerfile
+    container_name: celery-beat
+    command: celery -A tasks beat --loglevel=info
+    depends_on:
+      - redis
+    networks:
+      - backend
+
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    networks:
+      - backend
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - backend
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.47.2
+    container_name: cadvisor
+    restart: always
+    ports:
+      - "8082:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - backend
+
+  node-exporter:
+    image: prom/node-exporter
+    container_name: node-exporter
+    restart: always
+    ports:
+      - "9101:9100"
+    networks:
+      - backend
+    pid: "host"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($|/)'
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    networks:
+      - backend
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - backend
+
+  kafka-consumer:
+    build:
+      context: ./STP_CORE
+    depends_on:
+      - kafka
+    command: python manage.py run_consumer
+    environment:
+      - KEYCLOAK_URL=http://keycloak:8080
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KEYCLOAK_REALM=master
+      - KEYCLOAK_CLIENT_ID=django
+      - KEYCLOAK_CLIENT_SECRET=Fl0ldyHPVK6bblz932a1LDT1UPjbSMS0
+    networks:
+      - backend
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    ports:
+      - "8085:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    depends_on:
+      - kafka
+    networks:
+      - backend
+
+
 volumes:
   mongo_data:
   minio_data:
   kc_postgres_data:
   stp_postgres_data:
+  prometheus_data:
+  grafana_data:
 
 networks:
   backend:
