@@ -95,6 +95,7 @@ services:
       - "9000:9000"
       - "9001:9001"
     environment:
+      MINIO_PROMETHEUS_AUTH_TYPE: "public"
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin123
     command: server --console-address ":9001" /data
@@ -118,6 +119,18 @@ services:
     networks:
       - backend
   
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter
+    container_name: postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://stp:stp_password@stp-postgres:5432/stp_ss?sslmode=disable"
+    ports:
+      - "9187:9187"
+    depends_on:
+      - stp-postgres
+    networks:
+      - backend
+
   # nginx:
   #   image: nginx:latest
   #   container_name: nginx-proxy
@@ -268,6 +281,7 @@ services:
       - KEYCLOAK_REALM=master
       - KEYCLOAK_CLIENT_ID=django
       - KEYCLOAK_CLIENT_SECRET=Fl0ldyHPVK6bblz932a1LDT1UPjbSMS0
+    restart: always
     networks:
       - backend
 
@@ -283,6 +297,51 @@ services:
       - kafka
     networks:
       - backend
+
+  redis-exporter:
+    image: oliver006/redis_exporter
+    container_name: redis-exporter
+    ports:
+      - "9121:9121"
+    environment:
+      - REDIS_ADDR=redis:6379
+    networks:
+      - backend
+
+  mongodb-exporter:
+    image: bitnami/mongodb-exporter:0.20.7
+    container_name: mongodb-exporter
+    ports:
+      - "9216:9216"
+    environment:
+      MONGODB_URI: "mongodb://mongo:27017"
+    depends_on:
+      - mongo
+    networks:
+      - backend
+
+  loki:
+    image: grafana/loki:2.9.1
+    container_name: loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./monitoring/loki-config.yml:/etc/loki/local-config.yaml
+    networks:
+      - backend
+
+  promtail:
+    image: grafana/promtail:2.9.1
+    container_name: promtail
+    volumes:
+      - /var/log:/var/log:ro
+      - ./logs:/app/logs
+      - ./monitoring/promtail-config.yml:/etc/promtail/promtail.yml
+    command: -config.file=/etc/promtail/promtail.yml
+    networks:
+      - backend
+
 
 
 volumes:

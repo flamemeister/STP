@@ -44,8 +44,16 @@ ARCHIVER_HOST = os.getenv("ARCHIVER_HOST", "http://archiver:8080")
 @api_view(["POST"])
 @require_jwt
 def predict_eta(request):
+    import time
+    start = time.time()  
+
     try:
         input_data = request.data
+        print("📥 Получен input_data:", input_data)
+
+        missing = [f for f in FEATURES if f not in input_data]
+        if missing:
+            return JsonResponse({"error": f"Missing fields: {missing}"}, status=400)
 
         df = pd.DataFrame([input_data], columns=FEATURES)
         X_scaled = X_scaler.transform(df)
@@ -58,6 +66,8 @@ def predict_eta(request):
         log_eta_unscaled = y_scaler.inverse_transform(log_eta_pred)
         eta_seconds = float(np.expm1(log_eta_unscaled)[0][0])
 
+        duration = round((time.time() - start) * 1000, 2)
+
         minutes = int(eta_seconds // 60)
         seconds = int(eta_seconds % 60)
         
@@ -67,7 +77,10 @@ def predict_eta(request):
             "eta_predictions", {
             "input": input_data,
             "eta_seconds": eta_seconds,
-        })
+            "duration_ms": duration  
+        },
+            user=request.user
+        )
         print("📤 Kafka сообщение отправлено")  
 
         return JsonResponse({
@@ -82,6 +95,9 @@ def predict_eta(request):
 @require_jwt
 def fastapi_proxy(request, path):
     import requests
+    import time
+
+    start = time.time()  
 
     cleaned_path = path
     if path.startswith("transport/"):
@@ -113,13 +129,18 @@ def fastapi_proxy(request, path):
                 params=request.GET,
             )
 
+        duration = round((time.time() - start) * 1000, 2)
+
         send_event(
             "proxy_calls", {
                 "path": path,
                 "target": "fastapi",
                 "method": request.method,
-                "status_code": response.status_code
-            })
+                "status_code": response.status_code,
+                "duration_ms": duration
+            },             
+            user=request.user
+            )
 
         return HttpResponse(
             response.content,
@@ -134,6 +155,9 @@ def fastapi_proxy(request, path):
 @require_jwt
 def archiver_proxy(request, path):
     import requests
+    import time
+
+    start = time.time()  
 
     url = f"{ARCHIVER_HOST}/{path}"
     headers = {
@@ -155,13 +179,18 @@ def archiver_proxy(request, path):
                 params=request.GET,
             )
 
+        duration = round((time.time() - start) * 1000, 2)
+
         send_event(
             "proxy_calls", {
             "path": path,
             "target": "archiver",
             "method": request.method,
-            "status_code": response.status_code
-        })
+            "status_code": response.status_code,
+            "duration_ms": duration
+        },
+            user=request.user
+        )
 
         return HttpResponse(
             response.content,
